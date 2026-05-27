@@ -331,7 +331,7 @@ def main() -> int:
 
     print("=" * 70)
     print("  MCP SERVER ENUMERATOR & INFORMATION LEAKER")
-    print("  Python 3.12+ | github.com/Jake-Schoellkopf/mcp-honeypot-tester")
+    print("  Python 3.12+ | github.com/Jake-Schoellkopf/aicu-agent")
     print("=" * 70)
 
     targets: list[str] = []

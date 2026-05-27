@@ -7,8 +7,8 @@ The first open-source security agent purpose-built for MCP (Model Context Protoc
 ## Install
 
 ```bash
-git clone https://github.com/Jake-Schoellkopf/mcp-honeypot-tester.git
-cd mcp-honeypot-tester
+git clone https://github.com/Jake-Schoellkopf/aicu-agent.git
+cd aicu-agent
 pip install httpx
 ```
 

@@ -84,9 +84,9 @@ def export_sarif(findings: list[Finding], target_url: str = "", output_dir: str 
         "runs": [{
             "tool": {
                 "driver": {
-                    "name": "mcp-honeypot-tester",
+                    "name": "aicu-agent",
                     "version": "3.0.0",
-                    "informationUri": "https://github.com/Jake-Schoellkopf/mcp-honeypot-tester",
+                    "informationUri": "https://github.com/Jake-Schoellkopf/aicu-agent",
                     "rules": rules,
                 }
             },
