@@ -1,6 +1,6 @@
-# MCP Security Tester
+# AICU Agent
 
-The first open-source security agent purpose-built for MCP (Model Context Protocol) server testing. Adaptive schema-aware probing, exploit chaining, stealth mode, LLM-based extraction, and honeypot detection.
+The first open-source AI security agent for MCP (Model Context Protocol) infrastructure testing. Adaptive probing, exploit chaining, LLM extraction, honeypot detection, and multi-model comparison.
 
 **Requires Python 3.12+**
 
@@ -21,161 +21,130 @@ python mcp_test.py scan --url https://target-mcp-server.com
 # Discover MCP servers from local configs
 python mcp_test.py discover
 
-# Test if a server is a honeypot
-python mcp_test.py honeypot --url https://suspicious-server.com
-
-# Extract MCP info through an LLM
-python mcp_test.py llm --llm https://chat-api.com/v1/chat
-
-# Interactive mode (LLM-guided)
-python mcp_test.py agent --url https://target.com --interactive
+# Run as API service for CI/CD
+python aicu_server.py --port 9000
 ```
 
 ## Commands
 
-| Command | What it does |
-|---------|-------------|
-| `scan` | Full adaptive security scan with reasoning, chaining, evasion |
-| `enum` | Enumerate tools/resources/prompts and probe for leaks |
-| `llm` | Trick an AI agent into revealing its MCP server details |
-| `honeypot` | Detect if a server is a decoy (fingerprint, inject, evade) |
-| `agent` | Interactive mode — pauses for LLM reasoning between phases |
-| `discover` | Find MCP servers in local config files |
-
-## Architecture
-
-```
-mcp_test.py              ← Unified CLI entry point
-├── mcp_agent_v3.py      ← Intelligent agent (reasoning loop, persistence, correlation)
-├── mcp_agent_v2.py      ← Adaptive agent (schema probing, stealth, chaining, reports)
-├── mcp_interactive.py   ← Interactive/LLM-guided mode
-├── mcp_enum.py          ← Direct MCP server enumeration + leak testing
-├── mcp_llm.py           ← LLM-based extraction (21 advanced prompts + response chaining)
-├── mcp_tester.py        ← Honeypot detection (fingerprint, inject, evade)
-├── mcp_agent.py         ← Original agent (auto-detect honeypot vs real)
-├── fp_filter.py         ← Strict false positive elimination
-└── knowledge_base.json  ← Persistent memory (auto-generated)
+```bash
+python mcp_test.py scan --url URL          # Full adaptive scan
+python mcp_test.py enum --url URL          # Enumerate + probe
+python mcp_test.py llm --llm URL           # Extract MCP info through LLM
+python mcp_test.py honeypot --url URL      # Honeypot detection
+python mcp_test.py agent --url URL --interactive  # LLM-guided mode
+python mcp_test.py discover                # Find local MCP configs
 ```
 
 ## Features
 
+### Intelligent Agent (v3)
+- **Reasoning loop** — re-plans after each phase based on discoveries
+- **Persistence** — remembers between runs (knowledge_base.json)
+- **Evasion adaptation** — 7 encoding retries when probes are blocked
+- **Multi-server correlation** — leaked creds from Server A tested on Server B
+- **Stealth mode** — jitter, UA rotation, randomized probe order
+
 ### Adaptive Probing
-Reads each tool's `inputSchema` and generates targeted probes per parameter type:
-- Path parameters → path traversal (`../../etc/passwd`)
-- URL parameters → SSRF (`http://169.254.169.254/`)
-- Command parameters → injection (`id; cat /etc/passwd`)
-- SQL parameters → SQLi (`' OR '1'='1`)
-- Key parameters → enumeration (`AWS_SECRET_ACCESS_KEY`, `admin`)
-
-### Exploit Chaining
-Uses findings from one tool to attack others:
-- Leaked credential from Tool A → tried as auth on Tool B
-- Leaked endpoint from Tool A → SSRF'd through Tool B
-
-### Stealth Mode
-- Random 0.5-3s jitter between requests
-- User-Agent rotation (8 real MCP client UAs)
-- Randomized probe ordering
-- Disable with `--no-stealth`
-
-### Evasion Adaptation
-When a probe is blocked, automatically retries with:
-1. URL encoding
-2. Double encoding
-3. Unicode substitution
-4. Case variation
-5. Null byte injection
-6. Path normalization tricks
-7. Whitespace manipulation
-
-### Multi-Server Correlation
-Scan multiple targets and cross-reference:
-```bash
-python mcp_test.py scan --url https://server-a.com --url https://server-b.com
-```
-Credentials leaked from Server A are tested against Server B.
+- Schema-aware: reads `inputSchema` and generates per-parameter attacks
+- Path traversal, SSRF, SQLi, command injection, key enumeration
+- Prioritizes tools based on what resources/prompts reveal
 
 ### LLM Extraction (21 Advanced Prompts)
-Tricks AI agents into revealing MCP details through:
-- Incident response framing
-- Terraform/Docker export requests
-- SDK generation requests
-- Least privilege audit framing
-- Negative space mapping
-
-With **response chaining**: if the LLM partially discloses, the tool automatically follows up.
-
-### Persistence
-`knowledge_base.json` remembers between runs:
-- Which probes succeeded (replayed on next scan)
-- Which probes were blocked (skipped or adapted)
-- Leaked credentials and endpoints (used for chaining)
-
-### False Positive Filtering
-Strict validation before any finding is reported:
-- Credential format validation (full regex, not partial)
-- Echo detection (discards responses that repeat input)
-- Denial detection (discards error messages with keywords)
-- Category-specific rules (SSRF must return real metadata, not just 200)
+- Incident response framing, Terraform export, SDK generation
+- Response chaining: follows up on partial disclosures automatically
+- No obvious keywords that trigger guardrails
 
 ### Full MCP Protocol Coverage
 - `tools/list` + `tools/call`
 - `resources/list` + `resources/read`
 - `prompts/list` + `prompts/get`
 - `sampling/createMessage`
-- `initialize` / `notifications/initialized`
 
-### HTML Reports
-Auto-generated after each scan at `reports/mcp_scan_<timestamp>.html`:
-- Severity stats with color-coded cards
-- Expandable evidence (full request + response)
-- Chain indicators showing exploit paths
-- Dark theme, responsive, print-friendly
+### Context Overflow Testing
+- Progressively fills context window to find safety rule breakpoints
+- Tests multiple padding styles (docs, code, data, noise)
+- Multiple injection techniques per size level
 
-## Output Formats
+### Attack Graph Visualization
+- Interactive force-directed HTML/SVG diagram
+- Nodes = findings, edges = exploit chains
+- Hover for details, auto-layout
 
+### Multi-Model Comparison Matrix
+- Same payloads against multiple LLMs
+- Color-coded HTML table (PASS/FAIL per model)
+- Per-model fail rate statistics
+
+### API Server (CI/CD Integration)
 ```bash
-# HTML report (default, auto-generated)
-reports/mcp_scan_2026-05-26_21-00-00.html
+python aicu_server.py --port 9000
 
-# JSON findings (knowledge_base.json contains structured data)
-knowledge_base.json
-
-# Console output with severity indicators
-🔴 [CRITICAL] Credential leaked via secrets_vault/aws
-🟠 [HIGH] System file via file_read/etc_passwd
-🟡 [MEDIUM] Resource readable: config.yaml
-🔵 [LOW] Non-trivial response from generic_tool
+# Trigger scans via HTTP
+curl -X POST http://localhost:9000/scan -d '{"url":"https://target.com"}'
+curl http://localhost:9000/results/<id>
+curl http://localhost:9000/health
 ```
 
-## Honeypot Detection
-
-Identifies known MCP honeypots (Zeltser template, Kadam's deception server):
-- Server version string fingerprinting
-- Known tool name matching
-- Minimal implementation detection
-- Alert injection testing (Slack XSS, SIEM log injection)
-- Evasion testing (skip initialize, spoof UA, batch requests)
-
-## Interactive Mode
-
-Pauses after enumeration and outputs state for LLM reasoning:
-```
-═══ PHASE 1 COMPLETE ═══
-Tools (3):
-  - secrets_vault (params: [key])
-  - db_query (params: [sql])
-  - file_read (params: [path])
-
-═══ DECISION NEEDED ═══
-What should I probe next?
+### Before/After Comparison
+```bash
+python compare.py --save baseline --results findings.json
+# ... target gets patched ...
+python compare.py --compare baseline --results findings_after.json
+# Output: "3 fixed, 1 new, 2 unchanged"
 ```
 
-Paste to your LLM, get a plan back, paste it in. The tool executes the plan.
+### Honeypot Detection
+- Fingerprints known honeypots (Zeltser, Kadam)
+- Alert injection testing (Slack XSS, SIEM injection)
+- Evasion testing (skip initialize, spoof UA, batch)
+
+### False Positive Filtering
+- Credential format validation (full regex)
+- Echo detection, denial filtering
+- Category-specific rules per finding type
+
+### Output Formats
+- **HTML** — polished interactive reports
+- **JSON** — structured findings for automation
+- **SARIF** — GitHub/Azure DevOps/SIEM integration
+- **Attack Graph** — visual exploit chain diagram
+- **Comparison** — before/after diff reports
+
+## Architecture
+
+```
+mcp_test.py              ← Unified CLI
+├── mcp_agent_v3.py      ← Intelligent agent (reasoning, persistence, correlation)
+├── mcp_agent_v2.py      ← Adaptive agent (schema probing, stealth, reports)
+├── mcp_interactive.py   ← LLM-guided interactive mode
+├── mcp_enum.py          ← Direct MCP enumeration + leak testing
+├── mcp_llm.py           ← LLM-based extraction (21 prompts + chaining)
+├── mcp_tester.py        ← Honeypot detection
+├── mcp_agent.py         ← Original agent (honeypot vs real)
+├── context_overflow.py  ← Context window overflow testing
+├── attack_graph.py      ← Exploit chain visualization
+├── model_matrix.py      ← Multi-model comparison
+├── aicu_server.py       ← HTTP API server for CI/CD
+├── compare.py           ← Before/after comparison
+├── fp_filter.py         ← False positive elimination
+├── output_formats.py    ← JSON + SARIF exporters
+├── demo.py              ← Terminal demo for recording
+└── knowledge_base.json  ← Persistent memory (auto-generated)
+```
+
+## Companion Tool
+
+For LLM application security testing (prompt injection, file upload attacks, safety bypass), see [**AICU**](https://github.com/Jake-Schoellkopf/aicu).
+
+| Tool | What it tests |
+|------|--------------|
+| **AICU** | LLM applications (prompt injection, file upload, safety bypass) |
+| **AICU Agent** | MCP infrastructure (server probing, credential extraction, protocol attacks) |
 
 ## Disclaimer
 
-Only test systems you own or have explicit authorization to test. This tool is for security research and authorized penetration testing only.
+Only test systems you own or have explicit authorization to test.
 
 ## License
 
