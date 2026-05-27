@@ -421,6 +421,11 @@ def run_intelligent_agent(targets: list[str], *, stealth_enabled: bool = True, d
     kb.save()
     print(f"\n  [KB] Saved: {len(kb.successful_probes)} successes, {len(kb.leaked_credentials)} creds, {len(kb.leaked_endpoints)} endpoints")
 
+    # Filter false positives
+    from fp_filter import filter_findings
+    print(f"\n  [FP FILTER] Validating {len(all_findings)} raw findings...")
+    all_findings = filter_findings(all_findings)
+
     # Generate report
     server_info = {"url": ", ".join(targets), "name": "multi-target" if len(targets) > 1 else targets[0]}
     report_path = generate_report(all_findings, server_info)
