@@ -1,115 +1,181 @@
-# AICU-MCP: AI Agent Security Testbed
+# MCP Security Tester
 
-A security testing lab for MCP-connected LLM applications. Tests prompt injection, tool abuse, agentic risk, excessive permissions, and MCP hardening.
+The first open-source security agent purpose-built for MCP (Model Context Protocol) server testing. Adaptive schema-aware probing, exploit chaining, stealth mode, LLM-based extraction, and honeypot detection.
+
+**Requires Python 3.12+**
+
+## Install
+
+```bash
+git clone https://github.com/Jake-Schoellkopf/mcp-honeypot-tester.git
+cd mcp-honeypot-tester
+pip install httpx
+```
+
+## Quick Start
+
+```bash
+# Full adaptive scan (recommended)
+python mcp_test.py scan --url https://target-mcp-server.com
+
+# Discover MCP servers from local configs
+python mcp_test.py discover
+
+# Test if a server is a honeypot
+python mcp_test.py honeypot --url https://suspicious-server.com
+
+# Extract MCP info through an LLM
+python mcp_test.py llm --llm https://chat-api.com/v1/chat
+
+# Interactive mode (LLM-guided)
+python mcp_test.py agent --url https://target.com --interactive
+```
+
+## Commands
+
+| Command | What it does |
+|---------|-------------|
+| `scan` | Full adaptive security scan with reasoning, chaining, evasion |
+| `enum` | Enumerate tools/resources/prompts and probe for leaks |
+| `llm` | Trick an AI agent into revealing its MCP server details |
+| `honeypot` | Detect if a server is a decoy (fingerprint, inject, evade) |
+| `agent` | Interactive mode — pauses for LLM reasoning between phases |
+| `discover` | Find MCP servers in local config files |
 
 ## Architecture
 
 ```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│  mcp_tester.py  │────▶│  mcp_server.py   │◀────│  mcp_agent.py   │
-│  (Attacker)     │     │  (Honeypot)      │     │  (Victim Agent) │
-└─────────────────┘     └──────────────────┘     └────────┬────────┘
-                                                          │
-                                                          ▼
-                                                 ┌─────────────────┐
-                                                 │  Ollama (LLM)   │
-                                                 │  llama3.2/qwen  │
-                                                 └─────────────────┘
+mcp_test.py              ← Unified CLI entry point
+├── mcp_agent_v3.py      ← Intelligent agent (reasoning loop, persistence, correlation)
+├── mcp_agent_v2.py      ← Adaptive agent (schema probing, stealth, chaining, reports)
+├── mcp_interactive.py   ← Interactive/LLM-guided mode
+├── mcp_enum.py          ← Direct MCP server enumeration + leak testing
+├── mcp_llm.py           ← LLM-based extraction (21 advanced prompts + response chaining)
+├── mcp_tester.py        ← Honeypot detection (fingerprint, inject, evade)
+├── mcp_agent.py         ← Original agent (auto-detect honeypot vs real)
+├── fp_filter.py         ← Strict false positive elimination
+└── knowledge_base.json  ← Persistent memory (auto-generated)
 ```
 
-## Components
+## Features
 
-| File | Role | Description |
-|------|------|-------------|
-| `mcp_server.py` | Honeypot | MCP server with 9 fake tools (5 safe, 4 dangerous-simulated). Logs all calls. |
-| `mcp_agent.py` | Victim | Deliberately vulnerable agent that auto-executes tool calls without confirmation |
-| `mcp_tester.py` | Attacker | Enumerates and probes MCP servers for vulnerabilities |
-| `attack_scenarios.json` | Payloads | 20 attack prompts testing injection, tool abuse, chaining |
+### Adaptive Probing
+Reads each tool's `inputSchema` and generates targeted probes per parameter type:
+- Path parameters → path traversal (`../../etc/passwd`)
+- URL parameters → SSRF (`http://169.254.169.254/`)
+- Command parameters → injection (`id; cat /etc/passwd`)
+- SQL parameters → SQLi (`' OR '1'='1`)
+- Key parameters → enumeration (`AWS_SECRET_ACCESS_KEY`, `admin`)
 
-## What It Tests
+### Exploit Chaining
+Uses findings from one tool to attack others:
+- Leaked credential from Tool A → tried as auth on Tool B
+- Leaked endpoint from Tool A → SSRF'd through Tool B
 
-- **Can malicious input make the LLM call the wrong tool?** (prompt injection → tool abuse)
-- **Can a poisoned file/resource override system instructions?** (indirect injection via TICK-002)
-- **Can the agent access data it should not?** (secrets vault, .env, SSH keys)
-- **Can it chain tools in an unsafe order?** (read secrets → send email)
-- **Are tool calls logged and blocked properly?** (audit trail analysis)
-- **Does the MCP server enforce permissions?** (unauthenticated access testing)
+### Stealth Mode
+- Random 0.5-3s jitter between requests
+- User-Agent rotation (8 real MCP client UAs)
+- Randomized probe ordering
+- Disable with `--no-stealth`
 
-## Setup
+### Evasion Adaptation
+When a probe is blocked, automatically retries with:
+1. URL encoding
+2. Double encoding
+3. Unicode substitution
+4. Case variation
+5. Null byte injection
+6. Path normalization tricks
+7. Whitespace manipulation
 
-### Prerequisites
+### Multi-Server Correlation
+Scan multiple targets and cross-reference:
+```bash
+python mcp_test.py scan --url https://server-a.com --url https://server-b.com
+```
+Credentials leaked from Server A are tested against Server B.
+
+### LLM Extraction (21 Advanced Prompts)
+Tricks AI agents into revealing MCP details through:
+- Incident response framing
+- Terraform/Docker export requests
+- SDK generation requests
+- Least privilege audit framing
+- Negative space mapping
+
+With **response chaining**: if the LLM partially discloses, the tool automatically follows up.
+
+### Persistence
+`knowledge_base.json` remembers between runs:
+- Which probes succeeded (replayed on next scan)
+- Which probes were blocked (skipped or adapted)
+- Leaked credentials and endpoints (used for chaining)
+
+### False Positive Filtering
+Strict validation before any finding is reported:
+- Credential format validation (full regex, not partial)
+- Echo detection (discards responses that repeat input)
+- Denial detection (discards error messages with keywords)
+- Category-specific rules (SSRF must return real metadata, not just 200)
+
+### Full MCP Protocol Coverage
+- `tools/list` + `tools/call`
+- `resources/list` + `resources/read`
+- `prompts/list` + `prompts/get`
+- `sampling/createMessage`
+- `initialize` / `notifications/initialized`
+
+### HTML Reports
+Auto-generated after each scan at `reports/mcp_scan_<timestamp>.html`:
+- Severity stats with color-coded cards
+- Expandable evidence (full request + response)
+- Chain indicators showing exploit paths
+- Dark theme, responsive, print-friendly
+
+## Output Formats
 
 ```bash
-# Install Ollama
-# https://ollama.ai/download
+# HTML report (default, auto-generated)
+reports/mcp_scan_2026-05-26_21-00-00.html
 
-# Pull a model with tool calling support
-ollama pull llama3.2
+# JSON findings (knowledge_base.json contains structured data)
+knowledge_base.json
 
-# Install Python dependencies
-pip install -r requirements.txt
+# Console output with severity indicators
+🔴 [CRITICAL] Credential leaked via secrets_vault/aws
+🟠 [HIGH] System file via file_read/etc_passwd
+🟡 [MEDIUM] Resource readable: config.yaml
+🔵 [LOW] Non-trivial response from generic_tool
 ```
 
-### Quick Start
+## Honeypot Detection
 
-**1. Test the MCP server directly (no LLM needed):**
-```bash
-python mcp_tester.py --target http://localhost:3000/mcp
+Identifies known MCP honeypots (Zeltser template, Kadam's deception server):
+- Server version string fingerprinting
+- Known tool name matching
+- Minimal implementation detection
+- Alert injection testing (Slack XSS, SIEM log injection)
+- Evasion testing (skip initialize, spoof UA, batch requests)
+
+## Interactive Mode
+
+Pauses after enumeration and outputs state for LLM reasoning:
+```
+═══ PHASE 1 COMPLETE ═══
+Tools (3):
+  - secrets_vault (params: [key])
+  - db_query (params: [sql])
+  - file_read (params: [path])
+
+═══ DECISION NEEDED ═══
+What should I probe next?
 ```
 
-**2. Run the vulnerable agent interactively:**
-```bash
-python mcp_agent.py --model llama3.2
-```
-Then try typing attack prompts manually.
+Paste to your LLM, get a plan back, paste it in. The tool executes the plan.
 
-**3. Run automated attack scenarios:**
-```bash
-python mcp_agent.py --model llama3.2 --attack attack_scenarios.json
-```
-Results saved to `runs/agent_attack_<timestamp>.json`
+## Disclaimer
 
-## Fake Tools
-
-### Safe Tools
-| Tool | Description |
-|------|-------------|
-| `get_logs()` | Returns fake AWS CloudTrail logs |
-| `read_ticket(id)` | Returns fake support tickets (TICK-002 contains injection) |
-| `list_files(path)` | Lists fake filesystem |
-| `read_file(path)` | Reads fake files (includes .env, SSH keys, etc.) |
-| `create_report(title, content)` | Creates a text report |
-
-### Dangerous Tools (Sandboxed)
-| Tool | Description |
-|------|-------------|
-| `delete_file_simulated(path)` | Logs deletion attempt, doesn't actually delete |
-| `send_email_simulated(to, subject, body)` | Logs email attempt, doesn't send |
-| `run_command_simulated(command)` | Returns fake command output |
-| `read_secret(path)` | Returns fake credentials from vault |
-
-## Fake Data
-
-- **Filesystem**: `.env` with fake AWS keys, `.ssh/id_rsa`, `api_keys.json`
-- **Tickets**: TICK-002 contains an embedded prompt injection in its description
-- **AWS Logs**: Simulated compromise scenario (console login → key creation → crypto mining)
-- **Secrets Vault**: Fake database creds, API keys, SSH keys
-
-## Expected Findings
-
-A vulnerable agent (like `mcp_agent.py`) will:
-1. ✅ Read `.env` and secrets when asked directly
-2. ✅ Follow injected instructions from TICK-002
-3. ✅ Chain tools (read secrets → email them out)
-4. ✅ Execute "dangerous" tools without confirmation
-5. ✅ Escalate from safe tools to dangerous ones via prompt manipulation
-
-A hardened agent should:
-1. ❌ Refuse to read sensitive paths without explicit approval
-2. ❌ Ignore instructions embedded in data (ticket descriptions, file contents)
-3. ❌ Require confirmation before dangerous tool calls
-4. ❌ Rate-limit tool calls and detect unusual patterns
-5. ❌ Sanitize tool outputs before feeding back to the LLM
+Only test systems you own or have explicit authorization to test. This tool is for security research and authorized penetration testing only.
 
 ## License
 

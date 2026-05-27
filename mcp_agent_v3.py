@@ -431,6 +431,13 @@ def run_intelligent_agent(targets: list[str], *, stealth_enabled: bool = True, d
     report_path = generate_report(all_findings, server_info)
     print(f"  [REPORT] {report_path}")
 
+    # Export JSON + SARIF
+    from output_formats import export_json, export_sarif
+    json_path = export_json(all_findings)
+    sarif_path = export_sarif(all_findings, target_url=targets[0])
+    print(f"  [JSON]   {json_path}")
+    print(f"  [SARIF]  {sarif_path}")
+
     # Summary
     print(f"\n  {'═' * 60}")
     print(f"  FINDINGS: {len(all_findings)}")
